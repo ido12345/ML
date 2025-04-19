@@ -218,7 +218,7 @@ Matrix mat_col(Matrix *src, int col);
 void mat_copy(Matrix *dest, Matrix *src);
 void mat_clear(Matrix *m);
 void print_mat(Matrix *m, const char *name, int padding, const char *format);
-void print_activation(Activation a, const char *name, int padding);
+void print_activation(Activation *a, const char *name, int padding);
 bool mat_same(Matrix *a, Matrix *b);
 bool mat_equal(Matrix *a, Matrix *b);
 void fwrite_mat(Matrix *m, FILE *dest);
@@ -605,14 +605,19 @@ Matrix *mat_alloc(int rows, int cols)
     return m;
 }
 
-#define mat_destroy(m)        \
-    do                        \
-    {                         \
-        if ((m)->data)        \
-        {                     \
-            free((m)->data);  \
-            (m)->data = NULL; \
-        }                     \
+#define mat_destroy(m)            \
+    do                            \
+    {                             \
+        if (m)                    \
+        {                         \
+            if ((m)->data)        \
+            {                     \
+                free((m)->data);  \
+                (m)->data = NULL; \
+            }                     \
+            free(m);              \
+            m = NULL;             \
+        }                         \
     } while (0);
 
 bool mat_same(Matrix *a, Matrix *b)
@@ -686,6 +691,7 @@ Network *NeuralNetwork(int *layers, int layersCount, ActivationType *activations
         nn->biases[i] = mat_alloc(1, layers[i + 1]);
         if (activations != NULL)
         {
+            nn->activations[i] = (Activation *)calloc(sizeof(*nn->activations[i]), 1);
             nn->activations[i]->type = activations[i];
             nn->activations[i]->activationFunc = getActFunc(activations[i]);
         }
@@ -826,9 +832,11 @@ void Network_diff(Network *nn, Network *g, float eps, Matrix *in, Matrix *out)
 {
     if (in->rows != out->rows)
         return;
-    if (!mat_same(NETWORK_IN(nn), &mat_row(in, 0)))
+    Matrix in_row = mat_row(in, 0);
+    if (!mat_same(NETWORK_IN(nn), &in_row))
         return;
-    if (!mat_same(NETWORK_OUT(nn), &mat_row(out, 0)))
+    Matrix out_row = mat_row(out, 0);
+    if (!mat_same(NETWORK_OUT(nn), &out_row))
         return;
     if (!Network_same(nn, g))
         return;
@@ -907,9 +915,11 @@ void Network_backprop(Network *nn, Network *g, Matrix *in, Matrix *out)
 {
     if (in->rows != out->rows)
         return;
-    if (!mat_same(NETWORK_IN(nn), &mat_row(in, 0)))
+    Matrix in_row = mat_row(in, 0);
+    if (!mat_same(NETWORK_IN(nn), &in_row))
         return;
-    if (!mat_same(NETWORK_OUT(nn), &mat_row(out, 0)))
+    Matrix out_row = mat_row(out, 0);
+    if (!mat_same(NETWORK_OUT(nn), &out_row))
         return;
     if (!Network_same(nn, g))
         return;
@@ -924,7 +934,8 @@ void Network_backprop(Network *nn, Network *g, Matrix *in, Matrix *out)
 
     for (int i = 0; i < n; i++)
     {
-        mat_copy(NETWORK_IN(nn), &mat_row(in, i));
+        Matrix cur_row = mat_row(in, i);
+        mat_copy(NETWORK_IN(nn), &cur_row);
         Network_forward(nn);
 
         for (int j = 0; j <= g->count; j++)
