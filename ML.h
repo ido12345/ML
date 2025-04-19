@@ -327,7 +327,7 @@ void Network_save(Network *nn, const char *fileName)
 {
 #if defined(_WIN32) || defined(_WIN64)
     char path[MAX_PATH];
-    int length = GetModuleFileName(NULL, path, sizeof(path));
+    int length = GetModuleFileNameA(NULL, path, sizeof(path));
     if (!length)
     {
         fprintf(stderr, "Failed to get file path\n");
@@ -377,7 +377,7 @@ void Network_load(Network *nn, const char *fileName)
 {
 #if defined(_WIN32) || defined(_WIN64)
     char path[MAX_PATH];
-    int length = GetModuleFileName(NULL, path, sizeof(path));
+    int length = GetModuleFileNameA(NULL, path, sizeof(path));
     if (!length)
     {
         fprintf(stderr, "Failed to get file path\n");
