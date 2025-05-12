@@ -75,15 +75,6 @@ float (*getActFunc(ActivationType a))(float);
 char *getActName(ActivationType a);
 float (*getActDerivative(ActivationType a))(float);
 
-// float safe_expf(float x)
-// {
-//     if (x > 88.72f)
-//         return expf(88.72f); // Prevent overflow
-//     if (x < -88.72f)
-//         return 0.0f; // Underflow case
-//     return expf(x);
-// }
-
 float sigmoidf(float x)
 {
     return (1.f / (1.f + expf(-x)));
@@ -204,9 +195,6 @@ int rand_int(int low, int high)
 
 void step_copy(Step *dest, Step *src);
 
-// TODO: these functions take the whole matrix as parameter,
-// thats bad it copies too much info,
-// needs to be switched to pointers to matrices
 Matrix *mat_alloc(int rows, int cols);
 void mat_dot(Matrix *dest, Matrix *a, Matrix *b);
 void mat_sum(Matrix *dest, Matrix *src);
@@ -250,6 +238,7 @@ void Network_save(Network *nn, const char *fileName);
 void Network_load(Network *nn, const char *fileName);
 int *Network_getArch(Network *nn);
 bool Network_cmpArch(Network *nn, int *arch, int archLen);
+void calc_QTargets(Network *TargetNN, Matrix *QTargets, Step *steps[], int *indexes);
 
 void Network_xavier_init(Network *nn);
 
@@ -776,8 +765,6 @@ float Network_cost(Network *nn, Matrix *in, Matrix *out)
 
 float Network_Q_cost(Network *nn, Step *steps[], int stepAmount, Matrix *Qtargets)
 {
-    (void)nn;
-
     if (!stepAmount)
         return 0;
     if (stepAmount != Qtargets->rows)
@@ -786,7 +773,9 @@ float Network_Q_cost(Network *nn, Step *steps[], int stepAmount, Matrix *Qtarget
     float result = 0.0f;
     for (int i = 0; i < stepAmount; i++)
     {
-        float d = (steps[i]->output - MAT_AT(Qtargets, i, 0));
+        mat_copy(NETWORK_IN(nn), steps[i]->state);
+        Network_forward(nn);
+        float d = (MAT_AT(NETWORK_IN(nn), 0, steps[i]->action) - MAT_AT(Qtargets, i, 0));
         result += d * d;
     }
     return result / stepAmount;
@@ -1083,6 +1072,34 @@ void Network_Q_backprop(Network *nn, Network *g, Matrix *Qtargets, Step *steps[]
         for (int k = 0; k < curBiases->cols; k++)
         {
             MAT_AT(curBiases, 0, k) /= n;
+        }
+    }
+}
+
+void calc_QTargets(Network *TargetNN, Matrix *QTargets, Step *steps[], int *indexes)
+{
+    float gamma = 0.99;
+    for (int i = 0; i < QTargets->rows; i++)
+    {
+        int curRandIdx = indexes[i];
+        if (steps[curRandIdx]->death == false)
+        {
+            mat_copy(NETWORK_IN(TargetNN), steps[curRandIdx + 1]->state);
+            Network_forward(TargetNN);
+
+            float maxQ = MAT_AT(NETWORK_OUT(TargetNN), 0, 0);
+            for (int j = 1; j < NETWORK_OUT(TargetNN)->cols; j++)
+            {
+                if (MAT_AT(NETWORK_OUT(TargetNN), 0, j) > maxQ)
+                {
+                    maxQ = MAT_AT(NETWORK_OUT(TargetNN), 0, j);
+                }
+            }
+            MAT_AT(QTargets, i, 0) = steps[curRandIdx]->reward + (gamma * maxQ);
+        }
+        else // steps[curRandIdx]->death = true
+        {
+            MAT_AT(QTargets, i, 0) = steps[curRandIdx]->reward;
         }
     }
 }
